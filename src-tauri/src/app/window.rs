@@ -27,6 +27,11 @@ use tauri::{
     AppHandle, Config, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
+#[cfg(all(target_os = "windows", feature = "runtime-template"))]
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    GetSystemMetrics, LoadImageW, IMAGE_ICON, LR_LOADFROMFILE, SM_CXICON, SM_CXSMICON, SM_CYICON,
+    SM_CYSMICON,
+};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::UI::{
     Shell::ExtractIconExW,
@@ -156,6 +161,47 @@ fn executable_icon_handles() -> Option<(isize, isize)> {
                 return None;
             }
         };
+        #[cfg(feature = "runtime-template")]
+        if let Some(directory) = executable.parent() {
+            let runtime = directory.join("pake-runtime");
+            let icon_path = runtime.join("icon.ico");
+            // CLI apps never load this override; an unconfigured template also
+            // retains its compiled icon. The builder supplies the ICO locally.
+            if runtime.join("pake.json").is_file() && icon_path.is_file() {
+                let wide: Vec<u16> = icon_path
+                    .as_os_str()
+                    .encode_wide()
+                    .chain(std::iter::once(0))
+                    .collect();
+                let (large, small) = unsafe {
+                    (
+                        LoadImageW(
+                            ptr::null_mut(),
+                            wide.as_ptr(),
+                            IMAGE_ICON,
+                            GetSystemMetrics(SM_CXICON),
+                            GetSystemMetrics(SM_CYICON),
+                            LR_LOADFROMFILE,
+                        ),
+                        LoadImageW(
+                            ptr::null_mut(),
+                            wide.as_ptr(),
+                            IMAGE_ICON,
+                            GetSystemMetrics(SM_CXSMICON),
+                            GetSystemMetrics(SM_CYSMICON),
+                            LR_LOADFROMFILE,
+                        ),
+                    )
+                };
+                if !large.is_null() {
+                    return Some((large as isize, small as isize));
+                }
+                eprintln!(
+                    "[Pake] Failed to load runtime icon from {}.",
+                    icon_path.display()
+                );
+            }
+        }
         let executable_wide: Vec<u16> = executable
             .as_os_str()
             .encode_wide()
