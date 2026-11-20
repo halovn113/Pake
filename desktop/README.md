@@ -1,0 +1,20 @@
+# WebAppMaker preview
+
+This is an independent early preview of the planned desktop manager. It reads the repository gallery, saves drafts in the browser, exports CLI configuration, starts local CLI builds, and installs or opens quick-created apps on Windows. Drafts are local to the browser profile and may be lost if browser data is cleared. Installer build artifacts and application records are stored under `desktop/builds.local/`. Cancelling a running build is not yet supported.
+
+On Windows, prepare the graphical uninstaller once, then run with Node.js 20.9 or later:
+
+```sh
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop/build-uninstaller.ps1
+node desktop/server.mjs
+```
+
+Open http://127.0.0.1:4175. Stop the server with Ctrl+C. Exported configurations can be used with `pake --config pake-config.json`; this still requires the CLI build toolchain described in the main documentation.
+
+Without an explicit icon, the CLI attempts to find one when it builds. The preview uses the site's `/favicon.ico` when available; this can differ from the icon the CLI ultimately selects. You can also enter an icon URL or choose a local image (up to 1 MB). Local icons are stored in browser drafts. When exporting a config with a local icon, allow both downloads, put the icon and JSON file together, and run `pake --config pake-config.json` from that directory. The icon filename in the JSON must match the downloaded file; browser renaming can require adjusting it.
+
+Advanced settings export existing CLI options. Custom CSS and JavaScript are stored in the draft and downloaded as separate files referenced by the config. Keep those files alongside the config and run the CLI from that directory. Windows sign-in startup is not yet available in this preview.
+
+Experimental quick creation uses `src-tauri/target/release/pake.exe` built with `cargo build --release --features runtime-template`. On Windows, it installs an app for the current user, creates a Start menu shortcut and registers an uninstaller. It chooses the gallery icon or site's favicon, accepts a custom image, or falls back to a letter icon. The shortcut, executable and runtime window use the selected icon. Installed apps have an Update runtime action: close the app first, then update it in My apps. The operation preserves its identifier, configuration and WebView profile; Use My apps to edit the website URL, icon and supported window settings after closing the app. The existing WebView profile is retained; a different website may require signing in again. Uninstalling keeps the app's WebView profile. Tray behavior, safe domains and automatic launch are not yet supported. A production release must package its own verified runtime rather than relying on a development build path. Install the preview dependencies with `npm install --prefix desktop/deps.local --no-save --no-package-lock sharp@0.35.5 resedit@2.0.3`. Runtime resource editing refuses signed binaries, because editing would invalidate their signature.
+
+New quick-created apps register a graphical uninstaller with confirmation, progress and failure feedback. It uses the WebAppMaker language selected at creation or runtime update. Existing installed apps can receive the new uninstaller through Update runtime after closing the app. The graphical executable is shared by content hash under `%LOCALAPPDATA%\WebAppMaker\uninstallers` and remains available after individual apps are removed; app profiles are not deleted. This preview uses a native interface with a hidden removal helper, not Windows Installer/MSI.

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebAppMaker</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-icon">W</span><div><strong>WebAppMaker</strong><small>Không gian của bạn</small></div></div>
+        <nav aria-label="Điều hướng chính">
+          <button class="nav active" data-view="gallery"><span>▦</span> Khám phá</button>
+          <button class="nav" data-view="drafts"><span>▣</span> Bản nháp <b id="draft-count">0</b></button>
+        </nav>
+        <div class="sidebar-note"><strong>Không giới hạn ý tưởng.</strong><p>Biến những trang web yêu thích thành không gian riêng của bạn.</p></div>
+      </aside>
+      <main>
+        <header class="topbar"><span>WORKSPACE / <b id="breadcrumb">KHÁM PHÁ</b></span><span class="preview-badge">BẢN XEM TRƯỚC</span></header>
+        <section id="gallery-view" class="view">
+          <div class="heading"><div><p class="eyebrow">CHÀO MỪNG BẠN</p><h1>Mọi thứ bạn yêu thích,<br /><em>ở một nơi.</em></h1><p>Chọn một trang web hoặc bắt đầu với địa chỉ của riêng bạn.</p></div><div class="heading-art" aria-hidden="true"><span>✳</span><span>◈</span><span>✦</span></div></div>
+          <form id="url-form" class="url-form"><span aria-hidden="true">↗</span><label class="sr-only" for="url-input">Địa chỉ trang web</label><input id="url-input" type="url" placeholder="Dán địa chỉ website, ví dụ https://example.com" required /><button class="primary" type="submit">Bắt đầu <span>→</span></button></form>
+          <div class="section-title"><div><p class="eyebrow">TÌM CẢM HỨNG</p><h2>Khám phá ứng dụng</h2></div><label class="search"><span aria-hidden="true">⌕</span><span class="sr-only">Tìm ứng dụng</span><input id="search" placeholder="Tìm ứng dụng..." type="search" /></label></div>
+          <div id="categories" class="categories" aria-label="Danh mục"></div><div id="gallery" class="gallery"></div><p id="gallery-empty" class="empty" hidden>Không tìm thấy ứng dụng phù hợp.</p>
+        </section>
+        <section id="drafts-view" class="view" hidden><div class="page-title"><p class="eyebrow">KHÔNG GIAN CỦA BẠN</p><h1>Bản nháp</h1><p>Các cấu hình bạn đã lưu trên trình duyệt này.</p></div><div id="draft-list" class="draft-list"></div><p id="drafts-empty" class="empty" hidden>Chưa có bản nháp nào. Hãy chọn một ứng dụng để bắt đầu.</p></section>
+        <section id="editor-view" class="view" hidden><button id="back" class="back">← Quay lại</button><div class="page-title"><p class="eyebrow">CẤU HÌNH ỨNG DỤNG</p><h1 id="editor-title">Tạo ứng dụng</h1><p>Thiết lập thông tin và cửa sổ theo cách bạn muốn.</p></div><form id="editor" class="editor"><div class="form-card"><h2>Thông tin cơ bản</h2><p>Tên và địa chỉ của ứng dụng.</p><div class="fields"><label>Tên ứng dụng<input name="name" required maxlength="100" /></label><label>Địa chỉ website<input name="url" type="url" required /></label><label>Địa chỉ biểu tượng <span class="optional">Không bắt buộc</span><input name="icon" type="url" placeholder="https://..." /></label></div></div><div class="form-card"><h2>Cửa sổ</h2><p>Chọn kích thước mặc định khi ứng dụng mở.</p><div class="size-fields"><label>Chiều rộng<input name="width" type="number" min="1" max="10000" required /></label><label>Chiều cao<input name="height" type="number" min="1" max="10000" required /></label></div><label class="toggle"><span><strong>Luôn ở trên cùng</strong><small>Giữ cửa sổ phía trên các ứng dụng khác.</small></span><input name="alwaysOnTop" type="checkbox" /></label><label class="toggle"><span><strong>Chế độ riêng tư</strong><small>Không lưu cookie và phiên đăng nhập.</small></span><input name="incognito" type="checkbox" /></label><label class="toggle"><span><strong>Tìm trong trang</strong><small>Bật tìm kiếm bằng Ctrl+F.</small></span><input name="enableFind" type="checkbox" /></label></div><div class="notice"><strong>Đang trong giai đoạn phát triển</strong><p>Bạn có thể lưu bản nháp và tải cấu hình CLI. Chức năng build và quản lý ứng dụng đã cài chưa được kết nối.</p></div><div class="actions"><button type="button" class="secondary" id="export">Tải cấu hình</button><button type="submit" class="primary">Lưu bản nháp</button></div></form></section>
+      </main>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
