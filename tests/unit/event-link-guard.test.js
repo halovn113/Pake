@@ -42,7 +42,16 @@ function loadEventHelpers({
     tagName: tagName.toUpperCase(),
     style: {},
     children: [],
-    addEventListener: () => {},
+    listeners: {},
+    addEventListener(type, handler) {
+      this.listeners[type] = handler;
+    },
+    getBoundingClientRect: () => ({
+      right: 100,
+      bottom: 100,
+      width: 100,
+      height: 100,
+    }),
     appendChild(child) {
       this.children.push(child);
       if (child.id) elementsById.set(child.id, child);
@@ -88,6 +97,9 @@ function loadEventHelpers({
     },
     window: {
       frames: [],
+      innerWidth: 1024,
+      innerHeight: 768,
+      matchMedia: () => ({ matches: false }),
       history: {
         back: () => {},
         forward: () => {},
@@ -176,6 +188,253 @@ function makeClickEvent(anchor) {
 }
 
 describe("event link guard", () => {
+  it.each([
+    [
+      "blob:https://example.com/abc",
+      [
+        "Download Image",
+        "Save Image As…",
+        "Copy Image",
+        "Temporary media — no shareable link",
+        "Reload page",
+      ],
+    ],
+    [
+      "data:image/png;base64,AAAA",
+      [
+        "Download Image",
+        "Save Image As…",
+        "Copy Image",
+        "Temporary media — no shareable link",
+        "Reload page",
+      ],
+    ],
+    [
+      "https://cdn.example.com/image.png",
+      [
+        "Download Image",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Address",
+        "Open in Browser",
+        "Reload page",
+      ],
+    ],
+  ])("only offers portable address actions for %s", (url, expected) => {
+    const context = loadEventHelpers({ withTauri: true });
+    runDomReady(context);
+    const listener = context.eventListeners.contextmenu[0].handler;
+    listener({
+      target: { tagName: "IMG", src: url, closest: () => null },
+      clientX: 10,
+      clientY: 10,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    const menu = context.document.getElementById("pake-context-menu");
+    expect(menu.children.map((item) => item.textContent)).toEqual(expected);
+  });
+
+  it("reloads the current webview from the page context menu", () => {
+    const context = loadEventHelpers({ withTauri: true });
+    runDomReady(context);
+    const listener = context.eventListeners.contextmenu[0].handler;
+    listener({ target: { tagName: "DIV", closest: () => null }, clientX: 10, clientY: 10, preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const menu = context.document.getElementById("pake-context-menu");
+    expect(menu.children[0].textContent).toBe("Reload page");
+    menu.children[0].listeners.click({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    expect(context.invokeCalls).toContainEqual(["webview_navigate", { action: "reload" }]);
+  });
+
+  it("keeps native editing context menus", () => {
+    const context = loadEventHelpers({ withTauri: true });
+    runDomReady(context);
+    const preventDefault = vi.fn();
+    context.eventListeners.contextmenu[0].handler({ target: { tagName: "INPUT", closest: (selector) => selector === "a" ? null : {} }, preventDefault, stopPropagation: vi.fn() });
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("keeps blob image downloads on the native download path", () => {
+    const context = loadEventHelpers({ withTauri: true });
+    runDomReady(context);
+    const url = "blob:https://example.com/abc";
+    context.eventListeners.contextmenu[0].handler({
+      target: { tagName: "IMG", src: url, closest: () => null },
+      clientX: 10,
+      clientY: 10,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    const menu = context.document.getElementById("pake-context-menu");
+    menu.children[0].listeners.click({
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    expect(context.nativeDownloadClicks).toHaveLength(1);
+    expect(context.nativeDownloadClicks[0][0]).toBe(url);
+    expect(context.invokeCalls).not.toContainEqual([
+      "plugin:shell|open",
+      { path: url },
+    ]);
+  });
+
+  it("shows address-copy success only after the clipboard write resolves", async () => {
+    const context = loadEventHelpers({ withTauri: true });
+    let finish;
+    context.navigator.clipboard = {
+      writeText: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    };
+    context.window.pakeToast = vi.fn();
+    runDomReady(context);
+    context.eventListeners.contextmenu[0].handler({
+      target: {
+        tagName: "IMG",
+        src: "https://example.com/a.png",
+        closest: () => null,
+      },
+      clientX: 10,
+      clientY: 10,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    context.document
+      .getElementById("pake-context-menu")
+      .children[3].listeners.click({
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      });
+    expect(context.window.pakeToast).not.toHaveBeenCalled();
+    finish();
+    await Promise.resolve();
+    expect(context.window.pakeToast).toHaveBeenCalledWith("Address copied");
+  });
+
+  it("saves the image to the chosen file before showing success", async () => {
+    const context = loadEventHelpers({ withTauri: true });
+    const image = { type: "image/png" };
+    const writable = {
+      write: vi.fn().mockResolvedValue(),
+      close: vi.fn().mockResolvedValue(),
+      abort: vi.fn(),
+    };
+    context.window.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, blob: async () => image });
+    context.window.showSaveFilePicker = vi
+      .fn()
+      .mockResolvedValue({ createWritable: async () => writable });
+    context.window.pakeToast = vi.fn();
+    runDomReady(context);
+    context.eventListeners.contextmenu[0].handler({
+      target: {
+        tagName: "IMG",
+        src: "blob:https://example.com/abc",
+        closest: () => null,
+      },
+      clientX: 10,
+      clientY: 10,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    context.document
+      .getElementById("pake-context-menu")
+      .children[1].listeners.click({
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      });
+    await vi.waitFor(() =>
+      expect(context.window.pakeToast).toHaveBeenCalledWith("Image saved"),
+    );
+    expect(writable.write).toHaveBeenCalledWith(image);
+    expect(writable.close).toHaveBeenCalledOnce();
+  });
+
+  it("reports clipboard failures without claiming the image was copied", async () => {
+    const context = loadEventHelpers({ withTauri: true });
+    context.window.pakeToast = vi.fn();
+    context.navigator.clipboard = {};
+    runDomReady(context);
+    context.eventListeners.contextmenu[0].handler({
+      target: {
+        tagName: "IMG",
+        src: "blob:https://example.com/abc",
+        closest: () => null,
+      },
+      clientX: 10,
+      clientY: 10,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    context.document
+      .getElementById("pake-context-menu")
+      .children[2].listeners.click({
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      });
+    expect(context.window.pakeToast).toHaveBeenCalledWith(
+      "Could not access image or clipboard",
+    );
+    expect(context.window.pakeToast).not.toHaveBeenCalledWith("Image copied");
+  });
+
+  it("copies decoded image data as PNG and reports success after clipboard completion", async () => {
+    const context = loadEventHelpers({ withTauri: true });
+    const png = { type: "image/png" };
+    const bitmap = { width: 4, height: 4, close: vi.fn() };
+    const originalCreate = context.document.createElement;
+    context.document.createElement = (tag) =>
+      tag === "canvas"
+        ? {
+            getContext: () => ({ drawImage: vi.fn() }),
+            toBlob: (callback) => callback(png),
+          }
+        : originalCreate(tag);
+    context.window.fetch = vi
+      .fn()
+      .mockResolvedValue({
+        ok: true,
+        blob: async () => ({ type: "image/jpeg" }),
+      });
+    context.window.createImageBitmap = vi.fn().mockResolvedValue(bitmap);
+    context.window.ClipboardItem = class {
+      constructor(data) {
+        this.data = data;
+      }
+    };
+    context.navigator.clipboard = {
+      write: vi.fn(async ([item]) => {
+        expect(await item.data["image/png"]).toBe(png);
+      }),
+    };
+    context.window.pakeToast = vi.fn();
+    runDomReady(context);
+    context.eventListeners.contextmenu[0].handler({
+      target: {
+        tagName: "IMG",
+        src: "blob:https://example.com/abc",
+        closest: () => null,
+      },
+      clientX: 10,
+      clientY: 10,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    context.document
+      .getElementById("pake-context-menu")
+      .children[2].listeners.click({
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      });
+    await vi.waitFor(() =>
+      expect(context.window.pakeToast).toHaveBeenCalledWith("Image copied"),
+    );
+    expect(bitmap.close).toHaveBeenCalledOnce();
+  });
   it("uses native Windows downloads once for same-origin files without IPC", () => {
     const context = loadEventHelpers({
       withTauri: true,

@@ -1075,12 +1075,27 @@ document.addEventListener("DOMContentLoaded", () => {
   const isChinese = isChineseLanguage();
 
   const menuTexts = {
+    reload: isChinese ? "刷新页面" : navigator.language?.toLowerCase().startsWith("vi") ? "Làm mới trang" : "Reload page",
     // Media operations
     downloadImage: isChinese ? "下载图片" : "Download Image",
+    saveImageAs: isChinese ? "图片另存为…" : "Save Image As…",
+    copyImage: isChinese ? "复制图片" : "Copy Image",
+    copiedImage: isChinese ? "图片已复制" : "Image copied",
+    copiedAddress: isChinese ? "地址已复制" : "Address copied",
+    imageSaved: isChinese ? "图片已保存" : "Image saved",
+    imageOperationFailed: isChinese
+      ? "操作失败，网站可能限制了访问"
+      : "Could not access image or clipboard",
+    savePickerUnavailable: isChinese
+      ? "此系统不支持选择保存位置"
+      : "Save As is unavailable on this system",
     downloadVideo: isChinese ? "下载视频" : "Download Video",
     downloadFile: isChinese ? "下载文件" : "Download File",
     copyAddress: isChinese ? "复制地址" : "Copy Address",
     openInBrowser: isChinese ? "浏览器打开" : "Open in Browser",
+    temporaryMedia: isChinese
+      ? "临时媒体，无法分享链接"
+      : "Temporary media — no shareable link",
   };
 
   // Menu theme configuration
@@ -1262,6 +1277,94 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function imageBlob(url) {
+    const response = await window.fetch(url, { credentials: "same-origin" });
+    if (!response.ok)
+      throw new Error(`Image request failed: ${response.status}`);
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) throw new Error("Not an image");
+    return blob;
+  }
+
+  function imageActionError(error) {
+    if (error?.name === "AbortError") return;
+    console.error("Image action failed:", error);
+    window.pakeToast?.(menuTexts.imageOperationFailed);
+  }
+
+  function copyImage(url) {
+    try {
+      if (
+        !navigator.clipboard?.write ||
+        typeof window.ClipboardItem !== "function"
+      ) {
+        throw new Error("Image clipboard is unavailable");
+      }
+      // Start clipboard.write in the click handler so transient user activation
+      // is preserved while the image is decoded asynchronously.
+      const png = imageBlob(url).then(async (blob) => {
+        const bitmap = await window.createImageBitmap(blob);
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Canvas is unavailable");
+          context.drawImage(bitmap, 0, 0);
+          return await new Promise((resolve, reject) =>
+            canvas.toBlob(
+              (result) =>
+                result
+                  ? resolve(result)
+                  : reject(new Error("PNG conversion failed")),
+              "image/png",
+            ),
+          );
+        } finally {
+          bitmap.close();
+        }
+      });
+      navigator.clipboard
+        .write([new window.ClipboardItem({ "image/png": png })])
+        .then(() => window.pakeToast?.(menuTexts.copiedImage))
+        .catch(imageActionError);
+    } catch (error) {
+      imageActionError(error);
+    }
+  }
+
+  async function saveImageAs(url) {
+    if (typeof window.showSaveFilePicker !== "function") {
+      window.pakeToast?.(menuTexts.savePickerUnavailable);
+      return;
+    }
+    try {
+      // Ask for a destination directly from the click, outside on_download.
+      const file = await window.showSaveFilePicker({
+        suggestedName: getFilenameFromUrl(url) || "image",
+      });
+      const blob = await imageBlob(url);
+      const writable = await file.createWritable();
+      try {
+        await writable.write(blob);
+        await writable.close();
+      } catch (error) {
+        await writable.abort();
+        throw error;
+      }
+      window.pakeToast?.(menuTexts.imageSaved);
+    } catch (error) {
+      imageActionError(error);
+    }
+  }
+
+  function copyAddress(url) {
+    navigator.clipboard
+      .writeText(url)
+      .then(() => window.pakeToast?.(menuTexts.copiedAddress))
+      .catch(imageActionError);
+  }
+
   // Check if element is media (image or video)
   function getMediaInfo(target) {
     // Check for img tags
@@ -1313,15 +1416,29 @@ document.addEventListener("DOMContentLoaded", () => {
           data.type === "image"
             ? menuTexts.downloadImage
             : menuTexts.downloadVideo;
-        items.push(
-          createMenuItem(downloadText, () => downloadImage(data.url)),
-          createMenuItem(menuTexts.copyAddress, () =>
-            navigator.clipboard.writeText(data.url),
-          ),
-          createMenuItem(menuTexts.openInBrowser, () =>
-            invoke("plugin:shell|open", { path: data.url }),
-          ),
-        );
+        items.push(createMenuItem(downloadText, () => downloadImage(data.url)));
+        if (data.type === "image") {
+          items.push(
+            createMenuItem(menuTexts.saveImageAs, () => saveImageAs(data.url)),
+            createMenuItem(menuTexts.copyImage, () => copyImage(data.url)),
+          );
+        }
+        // Blob URLs belong to the current webview, and data URLs may be too
+        // large or unsupported by external browsers. Neither is a portable
+        // address, but both can still be downloaded from the current page.
+        if (isSpecialDownload(data.url)) {
+          const message = createMenuItem(menuTexts.temporaryMedia, () => {});
+          message.style.opacity = "0.65";
+          message.style.cursor = "default";
+          items.push(message);
+        } else {
+          items.push(
+            createMenuItem(menuTexts.copyAddress, () => copyAddress(data.url)),
+            createMenuItem(menuTexts.openInBrowser, () =>
+              handleExternalLink(data.url),
+            ),
+          );
+        }
         break;
 
       case "link":
@@ -1334,9 +1451,7 @@ document.addEventListener("DOMContentLoaded", () => {
           );
         }
         items.push(
-          createMenuItem(menuTexts.copyAddress, () =>
-            navigator.clipboard.writeText(data.url),
-          ),
+          createMenuItem(menuTexts.copyAddress, () => copyAddress(data.url)),
           createMenuItem(menuTexts.openInBrowser, () =>
             invoke("plugin:shell|open", { path: data.url }),
           ),
@@ -1353,6 +1468,12 @@ document.addEventListener("DOMContentLoaded", () => {
     function (event) {
       const target = event.target;
 
+      // Preserve native editing and selection menus, including copy and paste.
+      const editable = target && typeof target.closest === "function" &&
+        target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])");
+      const selectedText = typeof window.getSelection === "function" && String(window.getSelection()).trim();
+      if (editable || selectedText) return;
+
       // Check for media elements (images/videos)
       const mediaInfo = getMediaInfo(target);
 
@@ -1363,8 +1484,8 @@ document.addEventListener("DOMContentLoaded", () => {
           : null;
       const isLink = linkElement && linkElement.href && !mediaInfo.isMedia;
 
-      // Only show custom menu for media or links
-      if (mediaInfo.isMedia || isLink) {
+      {
+
         event.preventDefault();
         event.stopPropagation();
 
@@ -1380,9 +1501,9 @@ document.addEventListener("DOMContentLoaded", () => {
           });
         }
 
+        menuItems.push(createMenuItem(menuTexts.reload, () => nativeNavigate("reload")));
         showContextMenu(event.clientX, event.clientY, menuItems);
       }
-      // For all other elements, let browser's default context menu handle it
     },
     true,
   );

@@ -7,7 +7,12 @@ use crate::util::{
 use std::path::PathBuf;
 use tauri::{Manager, WebviewWindow};
 use webview2_com::{
-    take_pwstr, DownloadStartingEventHandler, Microsoft::Web::WebView2::Win32::ICoreWebView2_4,
+    take_pwstr, DownloadStartingEventHandler,
+    Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_4, COREWEBVIEW2_DOWNLOAD_STATE, COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED,
+        COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED,
+    },
+    StateChangedEventHandler,
 };
 use windows_core::{Interface, HSTRING, PWSTR};
 
@@ -44,6 +49,58 @@ pub fn install(window: &WebviewWindow, target: Option<tauri::Url>) -> tauri::Res
                         match destination {
                             Ok(path) => {
                                 args.SetResultFilePath(&HSTRING::from(path.as_os_str()))?;
+                                let operation = args.DownloadOperation()?;
+                                let toast_window = download_window.clone();
+                                let notified =
+                                    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                                let mut state_token = 0;
+                                operation.add_StateChanged(
+                                    &StateChangedEventHandler::create(Box::new(
+                                        move |operation, _| {
+                                            let Some(operation) = operation else {
+                                                return Ok(());
+                                            };
+                                            let mut state = COREWEBVIEW2_DOWNLOAD_STATE::default();
+                                            operation.State(&mut state)?;
+                                            if state != COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED
+                                                && state != COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED
+                                            {
+                                                return Ok(());
+                                            }
+                                            if notified
+                                                .swap(true, std::sync::atomic::Ordering::Relaxed)
+                                            {
+                                                return Ok(());
+                                            }
+                                            if state == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED {
+                                                let mut result = PWSTR::null();
+                                                let path = if operation
+                                                    .ResultFilePath(&mut result)
+                                                    .is_ok()
+                                                {
+                                                    Some(PathBuf::from(take_pwstr(result)))
+                                                } else {
+                                                    None
+                                                };
+                                                crate::util::show_download_finished(
+                                                    &toast_window,
+                                                    path,
+                                                    None,
+                                                );
+                                            } else {
+                                                show_toast(
+                                                    &toast_window,
+                                                    &get_download_message_with_lang(
+                                                        MessageType::Failure,
+                                                        None,
+                                                    ),
+                                                );
+                                            }
+                                            Ok(())
+                                        },
+                                    )),
+                                    &mut state_token,
+                                )?;
                                 // Unlike Wry's requested callback, leave WebView2's UI visible.
                                 args.SetHandled(false)?;
                                 args.SetCancel(false)?;
