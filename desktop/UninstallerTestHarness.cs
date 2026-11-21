@@ -15,7 +15,7 @@ internal static class UninstallerTestHarness
             if (key == null || !String.Equals(key.GetValue("DisplayName") as string, "WebAppMaker Native QA", StringComparison.Ordinal)) return 2;
         }
         string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WebAppMaker", "apps", args[0]);
-        try { UninstallService.Remove(args[0], path, true); Console.WriteLine("Removal succeeded"); return 0; }
+        try { UninstallService.Remove(args[0], path, true, false); Console.WriteLine("Removal succeeded"); return 0; }
         catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
     }
 }

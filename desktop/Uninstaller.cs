@@ -27,11 +27,11 @@ internal static class Program
 
 internal static class UninstallService
 {
-    internal static void Remove(string id, string appPath, bool vietnamese)
+    internal static void Remove(string id, string appPath, bool vietnamese, bool deleteData)
     {
         string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
         string helper = Path.Combine(appPath, "uninstall.ps1");
-        ProcessStartInfo start = new ProcessStartInfo(powershell, "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + helper + "\" -Action Remove -AppId " + id + " -SilentError") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
+        ProcessStartInfo start = new ProcessStartInfo(powershell, "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + helper + "\" -Action Remove -AppId " + id + (deleteData ? " -DeleteData" : "") + " -SilentError") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
         using (Process process = Process.Start(start))
         {
             if (process == null) throw new InvalidOperationException("Could not start the removal helper.");
@@ -57,6 +57,7 @@ internal sealed class UninstallWindow : Form
     private readonly Button remove;
     private readonly Button cancel;
     private readonly Label status;
+    private readonly CheckBox deleteData;
     private readonly ProgressBar progress;
     private bool busy;
 
@@ -77,8 +78,8 @@ internal sealed class UninstallWindow : Form
         vietnamese = String.Equals(language, "vi", StringComparison.OrdinalIgnoreCase) || (String.IsNullOrEmpty(language) && CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "vi");
         if (!File.Exists(Path.Combine(appPath, "uninstall.ps1"))) throw new FileNotFoundException(T("Không tìm thấy bộ gỡ ứng dụng.", "The removal helper could not be found."));
         Text = T("Gỡ ứng dụng", "Uninstall application");
-        ClientSize = new Size(500, 225);
-        MinimumSize = new Size(516, 264);
+        ClientSize = new Size(500, 255);
+        MinimumSize = new Size(516, 294);
         MaximumSize = MinimumSize;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -86,13 +87,15 @@ internal sealed class UninstallWindow : Form
         MinimizeBox = false;
         Font = new Font("Segoe UI", 9F);
         Controls.Add(new Label { Text = T("Gỡ ", "Uninstall ") + appName + "?", Font = new Font("Segoe UI", 14F, FontStyle.Bold), AutoEllipsis = true, Location = new Point(24, 20), Size = new Size(450, 32) });
-        Controls.Add(new Label { Text = T("Ứng dụng và shortcut sẽ được gỡ. Dữ liệu đăng nhập được giữ lại.", "The app and its shortcut will be removed. Sign-in data will be kept."), Location = new Point(26, 62), Size = new Size(445, 45) });
-        status = new Label { Location = new Point(26, 112), Size = new Size(445, 22), Text = T("Đóng ứng dụng trước khi tiếp tục.", "Close the app before continuing.") };
+        Controls.Add(new Label { Text = T("Ứng dụng và shortcut sẽ được gỡ.", "The app and its shortcut will be removed."), Location = new Point(26, 62), Size = new Size(445, 45) });
+        deleteData = new CheckBox { Text = T("Xóa cả dữ liệu và thông tin đăng nhập", "Also delete app data and sign-in information"), Location = new Point(26, 98), Size = new Size(445, 25), Checked = false };
+        Controls.Add(deleteData);
+        status = new Label { Location = new Point(26, 135), Size = new Size(445, 22), Text = T("Đóng ứng dụng trước khi tiếp tục.", "Close the app before continuing.") };
         Controls.Add(status);
-        progress = new ProgressBar { Location = new Point(26, 140), Size = new Size(445, 9), Style = ProgressBarStyle.Marquee, Visible = false };
+        progress = new ProgressBar { Location = new Point(26, 162), Size = new Size(445, 9), Style = ProgressBarStyle.Marquee, Visible = false };
         Controls.Add(progress);
-        remove = new Button { Text = T("Gỡ ứng dụng", "Uninstall"), Location = new Point(278, 174), Size = new Size(105, 30) };
-        cancel = new Button { Text = T("Hủy", "Cancel"), Location = new Point(390, 174), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
+        remove = new Button { Text = T("Gỡ ứng dụng", "Uninstall"), Location = new Point(278, 204), Size = new Size(105, 30) };
+        cancel = new Button { Text = T("Hủy", "Cancel"), Location = new Point(390, 204), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
         remove.Click += StartRemoval;
         Controls.Add(remove); Controls.Add(cancel);
         AcceptButton = remove; CancelButton = cancel;
@@ -103,12 +106,14 @@ internal sealed class UninstallWindow : Form
 
     private void StartRemoval(object sender, EventArgs e)
     {
-        busy = true; remove.Enabled = false; cancel.Enabled = false; progress.Visible = true;
+        bool shouldDeleteData = deleteData.Checked;
+        if (shouldDeleteData && MessageBox.Show(this, T("Xóa vĩnh viễn dữ liệu và thông tin đăng nhập của ứng dụng?", "Permanently delete this app’s data and sign-in information?"), Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        busy = true; remove.Enabled = false; cancel.Enabled = false; deleteData.Enabled = false; progress.Visible = true;
         status.Text = T("Đang gỡ ứng dụng…", "Removing the application…");
         BackgroundWorker worker = new BackgroundWorker();
         worker.DoWork += delegate(object unused, DoWorkEventArgs result)
         {
-            UninstallService.Remove(id, appPath, vietnamese);
+            UninstallService.Remove(id, appPath, vietnamese, shouldDeleteData);
         };
         worker.RunWorkerCompleted += delegate(object unused, RunWorkerCompletedEventArgs result)
         {
@@ -117,9 +122,9 @@ internal sealed class UninstallWindow : Form
             {
                 status.Text = T("Không thể gỡ ứng dụng.", "The application could not be removed.");
                 MessageBox.Show(this, result.Error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                remove.Enabled = true; cancel.Enabled = true; return;
+                remove.Enabled = true; cancel.Enabled = true; deleteData.Enabled = true; return;
             }
-            MessageBox.Show(this, T("Đã gỡ ứng dụng. Dữ liệu đăng nhập vẫn được giữ.", "The app was removed. Sign-in data was kept."), Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, (shouldDeleteData ? T("Đã gỡ ứng dụng và xóa dữ liệu.", "The app and its data were removed.") : T("Đã gỡ ứng dụng. Dữ liệu đăng nhập vẫn được giữ.", "The app was removed. Sign-in data was kept.")), Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             Close();
         };
         worker.RunWorkerAsync();

@@ -15,12 +15,22 @@
   - [x] Replace the executable, shortcut icon file and runtime icon with rollback on replacement errors.
   - [x] Verify the edit flow with a dedicated Windows QA app; user confirmed retained sign-in and edits on YouTube.
 
+## New requests
+
+- [ ] Add a right-click action to open a link in another window of the same app.
+- [ ] Verify uninstall from My apps using the graphical confirmation and safe removal flow.
+- [ ] Investigate a native uninstaller without the PowerShell helper; distinguish quick apps from MSI installers.
+- [x] Use clean Start menu names for new apps when available and allow existing legacy shortcuts to be renamed when there is no collision. Verified installation, rename and removal with QA apps.
+- [ ] Verify the graphical keep/delete data choice end-to-end. The removal helper validates the profile path and was tested for both choices using dedicated QA profiles.
+- [ ] Test Picture-in-Picture on a real WebView2 app and distinguish it from website/browser PiP.
+
 ## Runtime features
 
-- [ ] Verify page refresh on Windows WebView2, including focused windows and blank/error pages. A Reload page action is available in the page context menu; Ctrl+R remains available when web shortcuts are enabled.
-- [ ] Add an optional Picture-in-Picture control for supported video elements, with an Advanced toggle. Availability depends on the webview, the page's permissions and the video; test real Windows WebView2 and a site that blocks PiP.
+- [ ] Verify page refresh on Windows WebView2, including focused windows and blank/error pages. A Reload page action is available in image and link context menus; ordinary page menus remain native. Ctrl+R remains available when web shortcuts are enabled.
+- [ ] Verify optional Picture-in-Picture on real Windows WebView2 and a site that blocks PiP. The Advanced toggle adds a control for supported top-level videos when creating an app; cross-origin frames and existing app editing remain unsupported.
 - [ ] Verify Save Image As and Copy Image on real WebView2, including blob images and cross-origin restrictions.
-- [ ] Research optional unpacked browser extensions on Windows; do not claim compatibility with browser stores or every extension.
+- [x] Research whether WebView2 supports optional unpacked extensions.
+- [ ] Implement and test optional unpacked extensions on Windows; store installation and compatibility remain unverified.
 
 ## Product completion
 
