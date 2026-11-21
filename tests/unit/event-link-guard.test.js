@@ -106,6 +106,7 @@ function loadEventHelpers({
       },
       location: {
         href: "https://example.com/app",
+        protocol: "https:",
         origin: "https://example.com",
         pathname: "/app",
         reload: () => {},
@@ -239,11 +240,21 @@ describe("event link guard", () => {
     const context = loadEventHelpers({ withTauri: true });
     runDomReady(context);
     const listener = context.eventListeners.contextmenu[0].handler;
-    listener({ target: { tagName: "DIV", closest: () => null }, clientX: 10, clientY: 10, preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    listener({ target: { tagName: "IMG", src: "https://example.com/image.png", closest: () => null }, clientX: 10, clientY: 10, preventDefault: vi.fn(), stopPropagation: vi.fn() });
     const menu = context.document.getElementById("pake-context-menu");
-    expect(menu.children[0].textContent).toBe("Reload page");
-    menu.children[0].listeners.click({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const reload = menu.children.find((item) => item.textContent === "Reload page");
+    expect(reload).toBeDefined();
+    reload.listeners.click({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
     expect(context.invokeCalls).toContainEqual(["webview_navigate", { action: "reload" }]);
+  });
+
+  it("keeps the native context menu on ordinary page content", () => {
+    const context = loadEventHelpers({ withTauri: true });
+    runDomReady(context);
+    const preventDefault = vi.fn();
+    context.eventListeners.contextmenu[0].handler({ target: { tagName: "DIV", closest: () => null }, preventDefault, stopPropagation: vi.fn() });
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(context.document.getElementById("pake-context-menu")).toBeNull();
   });
 
   it("keeps native editing context menus", () => {
@@ -252,6 +263,20 @@ describe("event link guard", () => {
     const preventDefault = vi.fn();
     context.eventListeners.contextmenu[0].handler({ target: { tagName: "INPUT", closest: (selector) => selector === "a" ? null : {} }, preventDefault, stopPropagation: vi.fn() });
     expect(preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("uses the page address for temporary video streams instead of the blob URL", async () => {
+    const context = loadEventHelpers({ withTauri: true });
+    context.navigator.clipboard = { writeText: vi.fn().mockResolvedValue() };
+    runDomReady(context);
+    context.eventListeners.contextmenu[0].handler({ target: { tagName: "VIDEO", src: "blob:https://example.com/stream", closest: () => null }, clientX: 10, clientY: 10, preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const items = context.document.getElementById("pake-context-menu").children;
+    expect(items.map((item) => item.textContent)).toEqual(["Download Video", "Temporary video stream — download may fail", "Copy page address", "Open page in browser", "Reload page"]);
+    const click = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
+    items[2].listeners.click(click);
+    expect(context.navigator.clipboard.writeText).toHaveBeenCalledWith("https://example.com/app");
+    items[3].listeners.click(click);
+    expect(context.invokeCalls).toContainEqual(["plugin:shell|open", { path: "https://example.com/app" }]);
   });
 
   it("keeps blob image downloads on the native download path", () => {

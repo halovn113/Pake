@@ -1096,6 +1096,9 @@ document.addEventListener("DOMContentLoaded", () => {
     temporaryMedia: isChinese
       ? "临时媒体，无法分享链接"
       : "Temporary media — no shareable link",
+    copyPageAddress: isChinese ? "复制页面地址" : "Copy page address",
+    openPageInBrowser: isChinese ? "在浏览器中打开页面" : "Open page in browser",
+    temporaryVideo: isChinese ? "临时视频流，下载可能失败" : "Temporary video stream — download may fail",
   };
 
   // Menu theme configuration
@@ -1427,10 +1430,21 @@ document.addEventListener("DOMContentLoaded", () => {
         // large or unsupported by external browsers. Neither is a portable
         // address, but both can still be downloaded from the current page.
         if (isSpecialDownload(data.url)) {
-          const message = createMenuItem(menuTexts.temporaryMedia, () => {});
+          const message = createMenuItem(
+            data.type === "video" ? menuTexts.temporaryVideo : menuTexts.temporaryMedia,
+            () => {},
+          );
           message.style.opacity = "0.65";
           message.style.cursor = "default";
           items.push(message);
+          // A blob/data URL is scoped to this webview. For videos, offer the
+          // actual page URL, clearly labelled, instead of an unusable stream URL.
+          if (data.type === "video" && /^https?:$/.test(window.location.protocol)) {
+            items.push(
+              createMenuItem(menuTexts.copyPageAddress, () => copyAddress(window.location.href)),
+              createMenuItem(menuTexts.openPageInBrowser, () => handleExternalLink(window.location.href)),
+            );
+          }
         } else {
           items.push(
             createMenuItem(menuTexts.copyAddress, () => copyAddress(data.url)),
@@ -1484,8 +1498,10 @@ document.addEventListener("DOMContentLoaded", () => {
           : null;
       const isLink = linkElement && linkElement.href && !mediaInfo.isMedia;
 
-      {
+      // Leave ordinary page context menus to the website or WebView.
+      if (!mediaInfo.isMedia && !isLink) return;
 
+      {
         event.preventDefault();
         event.stopPropagation();
 
