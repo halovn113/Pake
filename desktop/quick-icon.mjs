@@ -76,8 +76,12 @@ export async function resolveQuickIcon({ pageUrl, iconUrl, autoIconUrl, selected
   }
   if (iconUrl) return { ico: await makeIco(await downloadIcon(iconUrl)), source: 'custom' };
   for (const candidate of [autoIconUrl, new URL('/favicon.ico', pageUrl).href].filter(Boolean)) {
-    try { return { ico: await makeIco(await downloadIcon(candidate), { normalize: true }), source: 'website' }; }
-    catch { /* Try the next automatic source. */ }
+    // Website icons can fail transiently (network timeouts or a brief 5xx).
+    // Retry once before falling back to a different source or a letter icon.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try { return { ico: await makeIco(await downloadIcon(candidate), { normalize: true }), source: 'website' }; }
+      catch { /* Retry once, then try the next automatic source. */ }
+    }
   }
   const initial = (name.trim().match(/[a-z0-9]/i)?.[0] || 'W').toUpperCase();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" rx="54" fill="#6d60dc"/><text x="128" y="174" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="150" fill="white">${initial}</text></svg>`;

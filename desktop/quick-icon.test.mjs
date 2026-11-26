@@ -61,3 +61,10 @@ test('enlarges padded automatic icons while preserving selected image padding', 
     assert.equal(await visibleWidth(custom.ico), 128);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('retries an automatic favicon after a temporary network failure', async () => {
+  const originalFetch = globalThis.fetch; let attempts = 0;
+  globalThis.fetch = async () => { if (++attempts === 1) throw new Error('temporary failure'); return new Response('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>', { status: 200 }); };
+  try { const result = await resolveQuickIcon({ pageUrl: 'https://example.com', name: 'Example' }); assert.equal(result.source, 'website'); assert.equal(attempts, 2); }
+  finally { globalThis.fetch = originalFetch; }
+});
