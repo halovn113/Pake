@@ -1,4 +1,4 @@
-// Optional video Picture-in-Picture control for WebAppMaker apps.
+// Optional video Picture-in-Picture control for WebAppEz apps.
 (() => {
   if (window.top !== window || !document.pictureInPictureEnabled) return;
   const button = document.createElement('button');

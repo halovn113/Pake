@@ -22,16 +22,16 @@ internal static class Program
         if (args.Length == 0)
         {
             try { LaunchRegisteredUninstaller(); }
-            catch (Exception error) { MessageBox.Show(error.Message, "WebAppMaker", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception error) { MessageBox.Show(error.Message, "WebAppEz", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             return;
         }
         if (args.Length != 1 || !Regex.IsMatch(args[0], "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
         {
-            MessageBox.Show("Invalid application identity.", "WebAppMaker", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Invalid application identity.", "WebAppEz", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
         try { Application.Run(new UninstallWindow(args[0])); }
-        catch (Exception error) { MessageBox.Show(error.Message, "WebAppMaker", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception error) { MessageBox.Show(error.Message, "WebAppEz", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
     private static void LaunchRegisteredUninstaller()

@@ -170,7 +170,7 @@ if ($Action -eq 'CleanShortcut') {
     Assert-SafeAppDirectory
     $actualExeName = Get-ExecutableName $appPath
     $running = Get-CimInstance Win32_Process -Filter "Name = '$actualExeName'" | Where-Object { $_.ExecutablePath -eq (Join-Path $appPath $actualExeName) }
-    if ($running) { if ($SilentError) { throw 'Close the application before uninstalling it.' }; Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('Close the application before uninstalling it.', 'WebAppMaker') | Out-Null; exit 1 }
+    if ($running) { if ($SilentError) { throw 'Close the application before uninstalling it.' }; Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('Close the application before uninstalling it.', 'WebAppEz') | Out-Null; exit 1 }
     $shortcut = if ($entry.WebAppMakerShortcut) { [string] $entry.WebAppMakerShortcut } else { Get-ShortcutPath $entry.DisplayName -Legacy }
     $plainShortcut = Get-ShortcutPath $entry.DisplayName
     $legacyShortcut = Get-ShortcutPath $entry.DisplayName -Legacy

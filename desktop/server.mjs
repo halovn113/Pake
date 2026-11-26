@@ -202,4 +202,4 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { 'Content-Type': file[1], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' }).end(await readFile(path.join(directory, file[0])));
   } catch (error) { json(response, 400, { error: error.message || 'Không thể xử lý yêu cầu.' }); }
 });
-server.listen(4175, '127.0.0.1', () => console.log('WebAppMaker: http://127.0.0.1:4175'));
+server.listen(4175, '127.0.0.1', () => console.log('WebAppEz: http://127.0.0.1:4175'));

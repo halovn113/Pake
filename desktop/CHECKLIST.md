@@ -1,4 +1,4 @@
-# WebAppMaker roadmap
+# WebAppEz roadmap
 
 ## Quick creation on Windows
 
@@ -42,7 +42,7 @@
 
 ## Product completion
 
-- [ ] Package WebAppMaker as an independent desktop app with its runtime. The server now supports a separate absolute data root; the desktop shell, packaged dependencies, migration and installer build support are still needed.
+- [ ] Package WebAppEz as an independent desktop app with its runtime. The server now supports a separate absolute data root; the desktop shell, packaged dependencies, migration and installer build support are still needed.
 - [ ] Finish English localization and test small windows and high DPI. Expanded translations for manager dialogs, add-on compatibility warnings, profile cleanup and known backend errors; verify the full UI and remaining dynamic/OS errors in English, including small windows and high DPI.
 - [ ] Test app lifecycle and installer creation on Windows, including failure recovery.
 - [ ] Verify installer-build cancellation end-to-end on Windows with a dedicated build. The manager now requests termination of the build process tree and avoids registering cancelled results; temporary files are retained. A dedicated single-process termination smoke test passed, but a full process-tree build test is still needed.

@@ -161,7 +161,7 @@ Object.assign(english, {
   "Đường dẫn tiện ích không an toàn.": "Unsafe add-on path.",
   "Định danh ứng dụng không khớp.": "The app identity does not match.",
   "Định danh ứng dụng không khớp; không thể cập nhật.": "The app identity does not match; cannot update.",
-  "Phiên bản này từng gây màn hình đen khi thử với YouTube trên WebAppMaker.": "This version previously caused a black screen when tested with YouTube in WebAppMaker.",
+  "Phiên bản này từng gây màn hình đen khi thử với YouTube trên WebAppEz.": "This version previously caused a black screen when tested with YouTube in WebAppEz.",
   "Addon cần kết nối phần mềm bên ngoài; kết nối này có thể không hoạt động trong WebView2.": "This add-on requires an external application; the connection may not work in WebView2.",
   "Chưa kiểm tra hoạt động; đọc manifest không bảo đảm addon tương thích.": "Not tested; reading the manifest does not guarantee compatibility.",
   "Không đọc được thông tin tương thích.": "Could not read compatibility information."
