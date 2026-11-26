@@ -550,6 +550,39 @@ pub fn webview_navigate(window: WebviewWindow, action: String) -> Result<(), Str
     }
 }
 
+// Remote pages may only open same-origin HTTP(S) links in another app window.
+fn allowed_app_link(current: &Url, target: &Url) -> bool {
+    matches!(target.scheme(), "http" | "https")
+        && target.host_str().is_some()
+        && target.username().is_empty()
+        && target.password().is_none()
+        && current.origin() == target.origin()
+}
+
+#[command]
+pub async fn open_app_link(window: WebviewWindow, url: String) -> Result<(), String> {
+    let target = Url::parse(&url).map_err(|_| "Invalid link".to_string())?;
+    let current = window.url().map_err(|error| error.to_string())?;
+    if !allowed_app_link(&current, &target) {
+        return Err("Only same-site HTTP(S) links can open in an app window".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let app = window.app_handle().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::app::window::open_link_window(&app, target)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Opening an app link window is supported on Windows only".into())
+    }
+}
+
 /// Shows the last finished download in the file manager, for a click on its toast.
 #[command]
 pub fn reveal_download(app: AppHandle) -> Result<(), String> {
@@ -961,5 +994,30 @@ mod tests {
         let requests = server.join().unwrap();
         assert!(requests[0].contains("cookie: session=fixture\r\n"));
         assert!(!requests[1].contains("cookie:"));
+    }
+}
+#[cfg(test)]
+mod app_link_tests {
+    use super::{allowed_app_link, Url};
+
+    #[test]
+    fn only_credential_free_same_origin_http_links_are_allowed() {
+        let current = Url::parse("https://www.youtube.com/watch?v=1").unwrap();
+        for (url, allowed) in [
+            ("https://www.youtube.com/watch?v=2", true),
+            ("https://www.youtube.com:443/", true),
+            ("https://other.example/", false),
+            ("http://www.youtube.com/", false),
+            ("https://www.youtube.com:444/", false),
+            ("https://user@www.youtube.com/", false),
+            ("chrome-search://local-ntp/local-ntp.html", false),
+            ("file:///test", false),
+        ] {
+            assert_eq!(
+                allowed_app_link(&current, &Url::parse(url).unwrap()),
+                allowed,
+                "{url}"
+            );
+        }
     }
 }

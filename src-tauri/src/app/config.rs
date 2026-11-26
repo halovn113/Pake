@@ -133,6 +133,9 @@ pub struct PakeConfig {
     /// login item in step at every start (see `autostart.rs`).
     #[serde(default)]
     pub launch_at_login: bool,
+    /// Enable locally selected unpacked extensions for a runtime-created Windows app.
+    #[serde(default)]
+    pub browser_extensions: bool,
     /// Replaces the compiled custom.js when a runtime override supplies one.
     #[serde(skip)]
     pub runtime_custom_js: Option<String>,

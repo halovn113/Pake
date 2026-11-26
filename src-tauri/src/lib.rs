@@ -31,8 +31,8 @@ const GDK_BACKEND: &str = "GDK_BACKEND";
 use app::window::enter_configured_fullscreen;
 use app::{
     invoke::{
-        clear_dock_badge, close_notification, download_file, increment_dock_badge, quit_app,
-        reveal_download, send_notification, set_dock_badge, set_dock_badge_label,
+        clear_dock_badge, close_notification, download_file, increment_dock_badge, open_app_link,
+        quit_app, reveal_download, send_notification, set_dock_badge, set_dock_badge_label,
         set_title_bar_color, set_zoom, update_theme_mode, webview_navigate,
     },
     setup::{set_global_shortcut, set_system_tray},
@@ -427,6 +427,7 @@ pub fn run_app() {
             update_theme_mode,
             set_zoom,
             webview_navigate,
+            open_app_link,
             set_title_bar_color,
             quit_app,
             reveal_download,

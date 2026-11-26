@@ -13,6 +13,7 @@ fn main() {
             "update_theme_mode",
             "set_zoom",
             "webview_navigate",
+            "open_app_link",
             "set_title_bar_color",
             "quit_app",
             "reveal_download",

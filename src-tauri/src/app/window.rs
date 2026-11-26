@@ -326,6 +326,28 @@ fn open_requested_window(
     Ok(window)
 }
 
+#[cfg(target_os = "windows")]
+pub fn open_link_window(app: &AppHandle, url: Url) -> tauri::Result<WebviewWindow> {
+    let state = app.state::<MultiWindowState>();
+    let label = state.next_window_label();
+    let window = build_window(
+        app,
+        &state.pake_config,
+        &state.tauri_config,
+        WindowBuildOptions {
+            label: &label,
+            url: WebviewUrl::External(url),
+            visible: true,
+            new_window_features: None,
+        },
+    )?;
+    reapply_window_icon(&window);
+    if let Err(error) = window.set_focus() {
+        eprintln!("[Pake] Failed to focus link window: {error}");
+    }
+    Ok(window)
+}
+
 /// Open a multi-window clone of the home app. The window is built hidden and
 /// revealed on its first real page load (see `lib.rs` on_page_load) so Cmd+N
 /// does not flash an empty shell the way the main window used to.
@@ -619,6 +641,26 @@ fn build_window(
         .user_agent(user_agent)
         .resizable(window_config.resizable)
         .maximized(window_config.maximize);
+
+    #[cfg(all(target_os = "windows", feature = "runtime-template"))]
+    if config.runtime_app && config.browser_extensions {
+        let extension_dir = std::env::current_exe()?
+            .parent()
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::NotFound, "Missing executable directory")
+            })?
+            .join("pake-runtime")
+            .join("extensions");
+        if !extension_dir.is_dir() {
+            return Err(tauri::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Extension directory not found",
+            )));
+        }
+        window_builder = window_builder
+            .browser_extensions_enabled(true)
+            .extensions_path(extension_dir);
+    }
 
     // A size preset can be taller than the screen (the tablet one is 820x1180),
     // so the first window fits the primary monitor's work area; a size the
@@ -991,6 +1033,22 @@ fn build_window(
 
     window_builder = window_builder.on_navigation(|_| true);
 
+    // Keep reload outside the website so it is available on WebView error pages.
+    // A per-window handler targets the window whose menu was clicked.
+    #[cfg(all(target_os = "windows", feature = "runtime-template"))]
+    if config.runtime_app {
+        use tauri::menu::{Menu, MenuItem};
+        let reload = MenuItem::with_id(app, "webappmaker_reload", "⟳ Làm mới", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&reload])?;
+        window_builder = window_builder.menu(menu).on_menu_event(|window, event| {
+            if event.id().as_ref() == "webappmaker_reload" {
+                if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                    crate::app::navigation::reload_window(&webview);
+                }
+            }
+        });
+    }
+
     let window = window_builder.build()?;
 
     // A popup is built visible, so it can enter full screen now; a hidden window
@@ -998,6 +1056,48 @@ fn build_window(
     #[cfg(target_os = "macos")]
     if visible {
         enter_configured_fullscreen(&window);
+    }
+
+    // WebView2 reports real DOM fullscreen transitions, including iframe video.
+    // Keep the native reload menu outside the web content, but hide it while
+    // the video is fullscreen and restore it when the player exits fullscreen.
+    #[cfg(all(target_os = "windows", feature = "runtime-template"))]
+    if config.runtime_app {
+        let menu_window = window.clone();
+        if let Err(error) = window.with_webview(move |webview| {
+            use webview2_com::ContainsFullScreenElementChangedEventHandler;
+            let result = unsafe {
+                webview.controller().CoreWebView2().and_then(|core| {
+                    let mut token = Default::default();
+                    core.add_ContainsFullScreenElementChanged(
+                        &ContainsFullScreenElementChangedEventHandler::create(Box::new(
+                            move |sender, _| {
+                                let Some(sender) = sender else {
+                                    return Ok(());
+                                };
+                                let mut fullscreen = Default::default();
+                                sender.ContainsFullScreenElement(&mut fullscreen)?;
+                                let result = if fullscreen.as_bool() {
+                                    menu_window.hide_menu()
+                                } else {
+                                    menu_window.show_menu()
+                                };
+                                if let Err(error) = result {
+                                    eprintln!("[Pake] Failed to update fullscreen menu: {error}");
+                                }
+                                Ok(())
+                            },
+                        )),
+                        &mut token,
+                    )
+                })
+            };
+            if let Err(error) = result {
+                eprintln!("[Pake] Failed to watch WebView2 fullscreen: {error}");
+            }
+        }) {
+            eprintln!("[Pake] Failed to access WebView2 fullscreen state: {error}");
+        }
     }
 
     #[cfg(target_os = "windows")]

@@ -8,6 +8,7 @@ function loadEventHelpers({
   userAgent = "Mozilla/5.0",
   initialZoom = null,
   downloadError = null,
+  appWindowError = null,
   nativeDownloads = false,
   topWindow = null,
 } = {}) {
@@ -24,6 +25,7 @@ function loadEventHelpers({
   const nativeDownloadClicks = [];
   const invoke = (command, payload) => {
     invokeCalls.push([command, payload]);
+    if (command === "open_app_link" && appWindowError) return Promise.reject(appWindowError);
     if (command === "download_file" && downloadError)
       return Promise.reject(downloadError);
     return Promise.resolve();
@@ -234,6 +236,41 @@ describe("event link guard", () => {
     });
     const menu = context.document.getElementById("pake-context-menu");
     expect(menu.children.map((item) => item.textContent)).toEqual(expected);
+  });
+
+  it.each(["A", "IMG"])("opens same-origin %s links in another app window", (tagName) => {
+    const context = loadEventHelpers({ withTauri: true });
+    context.navigator.platform = "Win32";
+    runDomReady(context);
+    const link = { href: "https://example.com/watch?v=2" };
+    const target = { tagName, src: "https://example.com/image.png", closest: (selector) => selector === "a" ? link : null };
+    context.eventListeners.contextmenu[0].handler({ target, clientX: 10, clientY: 10, preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const menu = context.document.getElementById("pake-context-menu");
+    const action = menu.children.find((item) => item.textContent === "Open in a new app window");
+    expect(action).toBeDefined();
+    action.listeners.click({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    expect(context.invokeCalls).toContainEqual(["open_app_link", { url: link.href }]);
+  });
+
+  it("reports failure when opening a new app window is rejected", async () => {
+    const context = loadEventHelpers({ withTauri: true, appWindowError: new Error("unavailable") });
+    context.navigator.platform = "Win32";
+    context.window.pakeToast = vi.fn();
+    runDomReady(context);
+    const target = { tagName: "A", href: "https://example.com/watch?v=2", closest: (selector) => selector === "a" ? target : null };
+    context.eventListeners.contextmenu[0].handler({ target, clientX: 10, clientY: 10, preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const action = context.document.getElementById("pake-context-menu").children.find((item) => item.textContent === "Open in a new app window");
+    action.listeners.click({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    await vi.waitFor(() => expect(context.window.pakeToast).toHaveBeenCalledWith("Could not open a new app window"));
+  });
+
+  it("does not offer app-window action for a cross-origin link", () => {
+    const context = loadEventHelpers({ withTauri: true });
+    context.navigator.platform = "Win32";
+    runDomReady(context);
+    const target = { tagName: "A", href: "https://other.example/", closest: (selector) => selector === "a" ? target : null };
+    context.eventListeners.contextmenu[0].handler({ target, clientX: 10, clientY: 10, preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    expect(context.document.getElementById("pake-context-menu").children.some((item) => item.textContent === "Open in a new app window")).toBe(false);
   });
 
   it("reloads the current webview from the page context menu", () => {

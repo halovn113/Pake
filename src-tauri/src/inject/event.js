@@ -1093,6 +1093,9 @@ document.addEventListener("DOMContentLoaded", () => {
     downloadFile: isChinese ? "下载文件" : "Download File",
     copyAddress: isChinese ? "复制地址" : "Copy Address",
     openInBrowser: isChinese ? "浏览器打开" : "Open in Browser",
+    openInAppWindow: navigator.language?.toLowerCase().startsWith("vi") ? "Mở trong cửa sổ app mới" : "Open in a new app window",
+    openAppWindowFailed: navigator.language?.toLowerCase().startsWith("vi") ? "Không thể mở cửa sổ app mới" : "Could not open a new app window",
+    openAppWindowSlow: navigator.language?.toLowerCase().startsWith("vi") ? "Mở cửa sổ app đang mất nhiều thời gian" : "Opening the app window is taking longer than expected",
     temporaryMedia: isChinese
       ? "临时媒体，无法分享链接"
       : "Temporary media — no shareable link",
@@ -1409,6 +1412,20 @@ document.addEventListener("DOMContentLoaded", () => {
     return { isMedia: false, url: "", type: "" };
   }
 
+  function makeAppWindowItem(url) {
+    try {
+      const target = new URL(url, window.location.href);
+      if (!/^Win/i.test(navigator.platform || "") || !["http:", "https:"].includes(target.protocol) || target.origin !== window.location.origin || target.username || target.password) return null;
+      return createMenuItem(menuTexts.openInAppWindow, () => {
+        const timer = setTimeout(() => window.pakeToast?.(menuTexts.openAppWindowSlow), 8000);
+        invoke("open_app_link", { url: target.href }).catch((error) => {
+          console.warn("Failed to open app window:", error);
+          window.pakeToast?.(menuTexts.openAppWindowFailed);
+        }).finally(() => clearTimeout(timer));
+      });
+    } catch (error) { console.warn("Invalid link:", error); return null; }
+  }
+
   // Simplified menu builder
   function buildMenuItems(type, data) {
     const items = [];
@@ -1464,6 +1481,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }),
           );
         }
+        const appWindowItem = makeAppWindowItem(data.url);
+        if (appWindowItem) items.push(appWindowItem);
         items.push(
           createMenuItem(menuTexts.copyAddress, () => copyAddress(data.url)),
           createMenuItem(menuTexts.openInBrowser, () =>
@@ -1509,6 +1528,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (mediaInfo.isMedia) {
           menuItems = buildMenuItems("media", mediaInfo);
+          if (linkElement?.href) {
+            const appWindowItem = makeAppWindowItem(linkElement.href);
+            if (appWindowItem) menuItems.push(appWindowItem);
+          }
         } else if (isLink) {
           const linkUrl = linkElement.href;
           menuItems = buildMenuItems("link", {
