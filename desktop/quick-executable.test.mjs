@@ -8,3 +8,5 @@ test('produces safe and readable Windows executable names', () => {
   assert.equal(executableName('..'), 'WebApp.exe');
   assert.ok(executableName('A'.repeat(100)).length <= 64);
 });
+
+test('reserves the uninstaller executable name', () => { assert.equal(executableName('Uninstall'), 'Uninstall App.exe'); });

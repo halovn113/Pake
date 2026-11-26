@@ -94,23 +94,35 @@ if ($Action -eq 'CleanShortcut') {
     $entry = Get-ItemProperty -LiteralPath $uninstallKey
     if ($entry.InstallLocation -ne $appPath) { throw 'Application location does not match its identity.' }
     Assert-SafeAppDirectory
-    if (-not (Test-Path -LiteralPath (Join-Path $appPath 'uninstall.ps1') -PathType Leaf)) { throw 'Application removal helper is missing.' }
+    if ((Get-ExecutableName $appPath) -ieq 'Uninstall.exe') { throw 'The application executable conflicts with the uninstaller filename.' }
     $nativeCommand = Set-NativeUninstaller
-    $helperPath = Join-Path $appPath 'uninstall.ps1'
+    $launcher = Join-Path $appPath 'Uninstall.exe'
     $nonce = [Guid]::NewGuid().ToString('N')
-    $staged = Join-Path $appPath "uninstall-$nonce.tmp"
-    $backup = Join-Path $appPath "uninstall-$nonce.bak"
-    Copy-Item -LiteralPath $PSCommandPath -Destination $staged
+    $staged = Join-Path $appPath "uninstaller-$nonce.tmp"
+    $backup = Join-Path $appPath "uninstaller-$nonce.bak"
+    $replaced = Test-Path -LiteralPath $launcher -PathType Leaf
+    if ($replaced) {
+        $existing = Get-Item -LiteralPath $launcher -Force
+        if ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Uninstaller launcher cannot be a link.' }
+        $oldCommand = [string] $entry.UninstallString
+        if ($oldCommand -notmatch '^"([^"\r\n]+)" ([0-9a-f-]+)$' -or $Matches[2] -ne $AppId) { throw 'Existing uninstaller launcher cannot be verified.' }
+        $oldHelper = $Matches[1]
+        $helpers = Join-Path (Split-Path -Parent $appsRoot) 'uninstallers'
+        $oldHash = [IO.Path]::GetFileNameWithoutExtension($oldHelper)
+        if ([IO.Path]::GetDirectoryName($oldHelper) -ne $helpers -or [IO.Path]::GetFileName($oldHelper) -notmatch '^[0-9a-f]{64}\.exe$' -or (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash -ne $oldHash) { throw 'Existing uninstaller launcher cannot be verified.' }
+    }
+    Copy-Item -LiteralPath $UninstallerPath -Destination $staged
     try {
-        [IO.File]::Replace($staged, $helperPath, $backup)
+        if ($replaced) { [IO.File]::Replace($staged, $launcher, $backup) } else { [IO.File]::Move($staged, $launcher) }
         try { New-ItemProperty -Path $uninstallKey -Name WebAppMakerLanguage -Value $Language -PropertyType String -Force | Out-Null; Set-ItemProperty -LiteralPath $uninstallKey -Name UninstallString -Value $nativeCommand }
-        catch { [IO.File]::Replace($backup, $helperPath, $null); throw }
-        Remove-Item -LiteralPath $backup -Force
+        catch { if ($replaced) { [IO.File]::Replace($backup, $launcher, $null) } else { Remove-Item -LiteralPath $launcher -Force }; throw }
+        if ($replaced) { Remove-Item -LiteralPath $backup -Force }
     } finally { if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Force } }
 } elseif ($Action -eq 'Install') {
     if (-not $Source -or -not $Name -or $Name.Length -gt 100) { throw 'Missing application source or name.' }
     $sourcePath = (Resolve-Path -LiteralPath $Source).Path
     $actualExeName = Get-ExecutableName $sourcePath
+    if ($actualExeName -ieq 'Uninstall.exe') { throw 'The application executable conflicts with the uninstaller filename.' }
     if ($ExeName -ne $actualExeName) { throw 'Executable name does not match application metadata.' }
     if (-not (Test-Path -LiteralPath (Join-Path $sourcePath $actualExeName) -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $sourcePath 'pake-runtime\app.json') -PathType Leaf)) { throw 'Application source is incomplete.' }
@@ -123,7 +135,7 @@ if ($Action -eq 'CleanShortcut') {
         New-Item -ItemType Directory -Path $appPath | Out-Null
         Copy-Item -LiteralPath (Join-Path $sourcePath $actualExeName) -Destination $appPath
         Copy-Item -LiteralPath (Join-Path $sourcePath 'pake-runtime') -Destination $appPath -Recurse
-        Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $appPath 'uninstall.ps1')
+        Copy-Item -LiteralPath $UninstallerPath -Destination (Join-Path $appPath 'Uninstall.exe')
         $icon = Join-Path $sourcePath 'app.ico'
         if (Test-Path -LiteralPath $icon -PathType Leaf) { Copy-Item -LiteralPath $icon -Destination $appPath }
         New-Item -ItemType Directory -Path $startMenu -Force | Out-Null

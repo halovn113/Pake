@@ -4,6 +4,7 @@ import { lstat, readFile } from 'node:fs/promises';
 export function executableName(name) {
   let base = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 _.-]/g, '_').replace(/^[^a-zA-Z0-9_]+|[ .]+$/g, '').slice(0, 60).replace(/[ .]+$/g, '');
   if (!base || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base)) base = 'WebApp';
+  if (/^uninstall$/i.test(base)) base = 'Uninstall App';
   return `${base}.exe`;
 }
 
